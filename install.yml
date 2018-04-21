@@ -1,0 +1,113 @@
+---
+- name: Install the weather-scheduler program
+  hosts: all
+  vars:
+    code_repository: "{{ lookup('env', 'repository')|default('https://github.com/mbruzek/weather-scheduler', true) }}"
+    install_directory: "{{ lookup('env', 'install_directory')|default(ansible_user_dir ~ '/weather-scheduler', true) }}"
+  vars_prompt:
+    # weather-scheduler variables
+    - name: week_day_of_event
+      prompt: The week day of the event
+      private: no
+    - name: time_of_event
+      prompt: Time of event HH:MM AM|PM
+      private: no
+    - name: api_key
+      prompt: Weather Underground API key
+      private: yes
+    - name: location
+      prompt: The location of the event (ST/City)
+      private: no
+    - name: extra_context
+      prompt: Context in comma separated key=value pairs
+      private: no
+    # Email variables
+    - name: from_address
+      prompt: The address to send the email from
+      private: no
+    - name: recipients
+      prompt: Comma separated email recipients
+      private: no
+    - name: subject
+      prompt: Subject of the event email
+      private: no
+    - name: smtp_server
+      prompt: SMTP server to send email from
+      private: no
+    - name: smtp_port
+      prompt: SMTP port on server
+      private: no
+    - name: smtp_user
+      prompt: The user to authenticate to the SMTP server
+      private: no
+    - name: smtp_password
+      prompt: Password for the SMTP server
+      private: yes
+    # Cron variables (m h dom mon dow) : https://en.wikipedia.org/wiki/Cron
+    - name: cron_minute
+      prompt: The minute when the job should run (0-59)
+      private: no
+    - name: cron_hour
+      prompt: The hour when the job should run (0-23)
+      private: no
+    - name: cron_day_of_month
+      prompt: The day of the month the job should run (1-31)
+      private: no
+    - name: cron_month
+      prompt: The month of the year the job should run (1-12)
+      private: no
+    - name: cron_day_of_week
+      prompt: The day of the week that the job should run (0-6 for Sunday-Saturday)
+      private: no
+  tasks:
+    - name: Delete any previous attempts
+      file:
+        path: "{{ install_directory }}"
+        state: absent
+
+    - name: Remove any previous cron jobs
+      cron:
+        name: "weather scheduler"
+        state: absent
+
+    - name: Installing required software
+      package:
+        name: "{{ item }}"
+        state: present
+      become: true
+      with_items:
+        - cron
+        - git
+        - ntp
+        - python3-pip
+
+    - name: Download the weather scheduler code
+      git:
+        repo: "{{ code_repository }}"
+        dest: "{{ install_directory }}"
+
+    # - name: Install the weather-scheduler application
+    #   pip:
+    #     name: git+https://github.com/mbruzek/weather-scheduler.git
+    #     executable: /usr/bin/pip3
+    #     extra_args: --user
+    #     #requirements: https://github.com/mbruzek/weather-scheduler/blob/master/requirements.txt
+
+    - name: Render the template to the target server
+      template:
+        src: schedule_event.sh.j2
+        dest: "{{ install_directory }}/schedule_event.sh"
+        mode: 0700
+
+    # Set up the cron job to call the script: m h dom mon dow job
+    - name: Schedule this job to run automatically
+      cron:
+        backup: yes
+        minute: "{{ cron_minute }}"
+        hour: "{{ cron_hour }}"
+        day: "{{ cron_day_of_month }}"
+        month: "{{ cron_month }}"
+        weekday: "{{ cron_day_of_week }}"
+        name: "weather scheduler"
+        user: "{{ ansible_user }}"
+        job: "{{ install_directory }}/schedule_event.sh"
