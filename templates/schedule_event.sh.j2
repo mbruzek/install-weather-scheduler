@@ -1,6 +1,9 @@
 #!/bin/bash
+# Calculate the date of the event using the format YYYY-MM-DD.
+export DATE=$(date -d {{ week_day_of_event }} +"%F")
 export KEY='{{ api_key }}'
 export SMTP_PASSWORD='{{ smtp_password }}'
 
-cd {{ install_directory }}
-./weather_scheduler.py --day '{{ week_day_of_event }}' --time '{{ time_of_event }}' --location '{{ location }}' --context "{{ extra_context }}" --fromaddress '{{ from_address }}' --recipients '{{ recipients }}' --subject "{{ subject }}" --server '{{ smtp_server }}' --port '{{ smtp_port }}' --username '{{ smtp_user }}'
+
+cd {{ code_directory }}
+./weather_scheduler.py --day "{{ week_day_of_event }}" --time "{{ time_of_event }}" --location '{{ location }}' --context "{{ extra_context }}" --fromaddress '{{ from_address }}' --recipients '{{ recipients }}' --subject "{{ subject }}" --server '{{ smtp_server }}' --port '{{ smtp_port }}' --username '{{ smtp_user }}'

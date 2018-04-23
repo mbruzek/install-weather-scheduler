@@ -1,9 +1,11 @@
 ---
-- name: Install the weather-scheduler program
+- name: Install a program and schedule a cron job to call it automatically
   hosts: all
   vars:
+    code_directory: "{{ lookup('env', 'code_directory')|default(ansible_user_dir ~ '/weather-scheduler', true) }}"
     code_repository: "{{ lookup('env', 'repository')|default('https://github.com/mbruzek/weather-scheduler', true) }}"
-    install_directory: "{{ lookup('env', 'install_directory')|default(ansible_user_dir ~ '/weather-scheduler', true) }}"
+    cron_directory: "{{ lookup('env', 'cron_directory')|default(ansible_user_dir ~ '/cron', true) }}"
+
   vars_prompt:
     # weather-scheduler variables
     - name: week_day_of_event
@@ -60,14 +62,13 @@
       prompt: The day of the week that the job should run (0-6 for Sunday-Saturday)
       private: no
   tasks:
-    - name: Delete any previous attempts
-      file:
-        path: "{{ install_directory }}"
-        state: absent
+    - name: Create the name for the cron job
+      set_fact:
+        cron_job_name: "weather-scheduler {{ week_day_of_event }}"
 
-    - name: Remove any previous cron jobs
+    - name: Remove any previous cron jobs of that name
       cron:
-        name: "weather scheduler"
+        name: "{{ cron_job_name }}"
         state: absent
 
     - name: Installing required software
@@ -84,19 +85,19 @@
     - name: Download the weather scheduler code
       git:
         repo: "{{ code_repository }}"
-        dest: "{{ install_directory }}"
+        dest: "{{ ansible_user_dir }}/weather-scheduler"
+        force: yes
 
-    # - name: Install the weather-scheduler application
-    #   pip:
-    #     name: git+https://github.com/mbruzek/weather-scheduler.git
-    #     executable: /usr/bin/pip3
-    #     extra_args: --user
-    #     #requirements: https://github.com/mbruzek/weather-scheduler/blob/master/requirements.txt
+    - name: Create the cron directory
+      file:
+        path: "{{ cron_directory }}"
+        state: directory
+        mode: 0700
 
     - name: Render the template to the target server
       template:
         src: schedule_event.sh.j2
-        dest: "{{ install_directory }}/schedule_event.sh"
+        dest: "{{ cron_directory }}/schedule_{{ week_day_of_event }}_event.sh"
         mode: 0700
 
     # Set up the cron job to call the script: m h dom mon dow job
@@ -108,6 +109,6 @@
         day: "{{ cron_day_of_month }}"
         month: "{{ cron_month }}"
         weekday: "{{ cron_day_of_week }}"
-        name: "weather scheduler"
+        name: "{{ cron_job_name }}"
         user: "{{ ansible_user }}"
-        job: "{{ install_directory }}/schedule_event.sh"
+        job: "{{ cron_directory }}/schedule_{{ week_day_of_event }}_event.sh"
